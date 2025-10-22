@@ -1,0 +1,2 @@
+1)while creating a new txt in the data or changing it ,
+ plz check the vectorstore and delete the renamed one.

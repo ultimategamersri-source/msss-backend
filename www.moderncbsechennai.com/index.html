@@ -1,0 +1,1160 @@
+`
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MSSS</title>
+    <link rel="stylesheet" href="dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="dist/css/bootstrap-theme.min.css">
+    <script src="js/jquery.js" type="text/javascript"></script>
+    <script src="dist/js/bootstrap.min.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+
+    <style>
+    /* === Floating Chat Button === */
+    #chat-btn {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(270deg, #ff6ec4, #7873f5, #42e695, #ffe140, #ff6ec4);
+        background-size: 1000% 1000%;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 65px;
+        height: 65px;
+        font-size: 30px;
+        cursor: pointer;
+        animation: moveGradient 8s linear infinite;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        z-index: 9999;
+    }
+
+    /* === Chat Window === */
+    #chat-window {
+        display: none;
+        position: fixed;
+        bottom: 100px;
+        right: 20px;
+        width: 350px;
+        min-height: 200px;
+        max-height: 600px;
+        background-color: #fdfdfd;
+        border-radius: 30px;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+        flex-direction: column;
+        border: 3px solid transparent;
+        /* border-image: linear-gradient(270deg, #ff6ec4, #7873f5, #42e695, #ffe140, #ff6ec4) 1; */
+        animation: moveGradient 15s linear infinite;
+        z-index: 9999;
+        display: flex;
+    }
+
+    /* === Chat Header === */
+    #chat-header {
+        background: linear-gradient(270deg, #ff6ec4, #7873f5, #42e695, #ffe140, #ff6ec4);
+        background-size: 1000% 1000%;
+        animation: moveGradient 10s linear infinite;
+        color: #fff;
+        padding: 14px;
+        text-align: center;
+        font-family: "Comic Sans MS", sans-serif;
+        border-top-left-radius: 30px;
+        border-top-right-radius: 30px;
+        font-size: large; /* add this border-radius: 20px; for pill look */
+        cursor: grab;
+    }
+
+
+    @keyframes moveGradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    /* === Chat Body === */
+    #chat-body {
+        flex: 1;
+        padding: 12px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: #fff;
+    }
+
+    /* === Message Bubbles === */
+    .message {
+        max-width: 80%;
+        padding: 10px 14px;
+        border-radius: 25px;
+        word-wrap: break-word;
+        font-family: "Comic Sans MS", sans-serif;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .user {
+        align-self: flex-end;
+        background: linear-gradient(135deg, #42e695, #3bb2b8);
+        color: #fff;
+        border-bottom-right-radius: 5px;
+    }
+
+    .bot {
+        align-self: flex-start;
+        background: linear-gradient(135deg, #7873f5, #a98df5);
+        color: white;
+        border-bottom-left-radius: 5px;
+        position: relative;
+        padding-left: 28px;
+    }
+
+    .bot .icon {
+        position: absolute;
+        top: 6px;
+        left: 8px;
+    }
+
+    /* === Input Area === */
+    #chat-input {
+        display: flex;
+        padding: 8px;
+        border-top: 1px solid #ccc;
+        background: #f7f7f7;
+        border-bottom-left-radius: 30px;
+        border-bottom-right-radius: 30px;
+    }
+
+    #user-input {
+        flex: 1;
+        min-height: 40px;
+        max-height: 120px;
+        resize: none;
+        border-radius: 20px;
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        font-size: 0.95em;
+        font-family: "Comic Sans MS", sans-serif;
+        outline: none;
+        transition: all 0.2s;
+    }
+
+    #user-input:focus {
+        border-color: #7873f5;
+    }
+
+    #send-btn {
+        margin-left: 8px;
+        padding: 10px 14px;
+        background: linear-gradient(135deg, #ff6ec4, #7873f5);
+        color: white;
+        border: none;
+        border-radius: 20px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: 0.2s;
+    }
+
+    #send-btn:hover {
+        transform: scale(1.1);
+    }
+    </style>
+
+</head>
+
+<body>
+    
+<button id="chat-btn">💬</button>
+
+<div id="chat-window">
+  <div id="chat-header" style="color: #ffed4f; font-weight: bold;">Brightly (School Assistant)</div>
+  <div id="chat-body"></div>
+  <div id="chat-input">
+    <textarea id="user-input" placeholder="Ask something..."></textarea>
+    <button id="send-btn">Send</button>
+  </div>
+</div>
+
+<script>
+const chatBtn = document.getElementById('chat-btn');
+const chatWindow = document.getElementById('chat-window');
+const sendBtn = document.getElementById('send-btn');
+const userInput = document.getElementById('user-input');
+const chatBody = document.getElementById('chat-body');
+
+let waiting = false;
+let chatHistory = [{ type: 'bot', text: 'Hello! Ask me about school.' }];
+
+// Toggle chat window
+let chatOpen = false;
+chatBtn.addEventListener('click', () => {
+  chatOpen = !chatOpen;
+  chatWindow.style.display = chatOpen ? 'flex' : 'none';
+  autoResizeTextarea();
+});
+
+// Draggable chat window
+const header = document.getElementById('chat-header');
+let isDragging = false, offsetX, offsetY;
+
+header.addEventListener('mousedown', e => {
+  isDragging = true;
+  offsetX = e.clientX - chatWindow.offsetLeft;
+  offsetY = e.clientY - chatWindow.offsetTop;
+  header.style.cursor = 'grabbing';
+});
+
+document.addEventListener('mousemove', e => {
+  if(isDragging){
+    chatWindow.style.left = (e.clientX - offsetX) + 'px';
+    chatWindow.style.top = (e.clientY - offsetY) + 'px';
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  isDragging = false;
+  header.style.cursor = 'grab';
+});
+
+// Auto-resize textarea
+function autoResizeTextarea(){
+  userInput.style.height = 'auto';
+  userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+}
+userInput.addEventListener('input', autoResizeTextarea);
+
+// Send message
+async function sendMessage(){
+  if(waiting) return;
+  const text = userInput.value.trim();
+  if(!text) return;
+
+  chatHistory.push({ type: 'user', text });
+  renderMessages();
+  userInput.value = '';
+  autoResizeTextarea();
+
+  chatHistory.push({ type: 'bot', text: '💭 Thinking...' });
+  renderMessages();
+  waiting = true;
+
+  try {
+    const response = await fetch('/ask', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ question: text })
+    });
+    const data = await response.json();
+    chatHistory.pop(); // remove thinking
+    chatHistory.push({ type: 'bot', text: data.answer });
+    renderMessages();
+  } catch {
+    chatHistory.push({ type: 'bot', text: '⚠️ Server not reachable.' });
+    renderMessages();
+  } finally { waiting = false; }
+}
+
+// Render messages
+function renderMessages(){
+  chatBody.innerHTML = '';
+  chatHistory.forEach(msg => {
+    const bubble = document.createElement('div');
+    bubble.className = `message ${msg.type}`;
+    if(msg.type==='bot'){
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.textContent = '💡';
+      bubble.appendChild(icon);
+    }
+    bubble.appendChild(document.createTextNode(msg.text));
+    chatBody.appendChild(bubble);
+  });
+  chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+sendBtn.addEventListener('click', sendMessage);
+userInput.addEventListener('keydown', e => {
+  if(e.key==='Enter' && !e.shiftKey){
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Initial render
+renderMessages();
+</script>
+    <div class="container-fluid">
+        <div class="jumbotron">
+            <img src="img/logo.png" alt="school logo." align="left" width="150" height="150"><img src="img/ritht side.jpg" alt="father of nation." align="right" width="170" height="170">
+            <h2 align="center">Modern Senior Secondary School</h2>
+            <p align="center">A G S OFFICE COLONY NANGANALLUR CHENNAI-600061
+                <br/> AFFILIATED TO CENTRAL BOARD OF SECONDARY EDUCATION. NEW DELHI <br/> AFFILIATION NO: 1930031 AND SCHOOL CODE : 55034 </p>
+        </div>
+    </div>
+    <nav role="navigation" class="navbar navbar-default">
+        <!-- Brand and toggle get grouped for better mobile display -->
+        <div class="navbar-header">
+            <button type="button" data-target="#navbarCollapse" data-toggle="collapse" class="navbar-toggle">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a href="https://www.moderncbsechennai.com/index.php" class="navbar-brand"></a>
+        </div>
+        <!-- Collection of nav links, forms, and other content for toggling -->
+        <div id="navbarCollapse" class="collapse navbar-collapse">
+            <ul class="nav navbar-nav">
+                <li class="active"><a href="index.php">Home</a></li>
+                <li><a href="ourmission.php">Our Mission</a></li>
+
+                <li class="dropdown">
+                    <a data-toggle="dropdown" class="dropdown-toggle" href="#">About Us <b class="caret"></b></a>
+                    <ul role="menu" class="dropdown-menu">
+                        <li><a href="cheifpatron.php">Chief Patron</a></li>
+                        <li><a href="principal.php">Principal</a></li>
+                        <li><a href="mies.php">MIES</a></li>
+                        <li><a href="#">Staff</a></li>
+
+                    </ul>
+                </li>
+                <li><a href="https://www.moderncbsechennai.com/cubonlinepayment.php">Online Fee Payment<img src="img/new.gif"alt="CUBnew." style="width:60px;height:30px;"></a></li>
+                <li><a href="https://www.moderncbsechennai.com/artical2025.php">School Day Celebration 2025<img src="img/nnew.gif" alt="newpingimage." style="width:60px;height:30px;"></a></li>
+                <li class="dropdown">
+                    <a data-toggle="dropdown" class="dropdown-toggle" href="#">Infrastructure<b class="caret"></b></a>
+                    <ul role="menu" class="dropdown-menu">
+                        <li><a href="infrastructure.php">Infrastructure</a></li>
+                        <li><a href="https://www.moderncbsechennai.com/newimaggallary.php">Photo gallery</a></li>
+                        <li><a href="result.php">Admission 2018-19</a></li>
+                    </ul>
+                </li>
+                <li class="dropdown">
+                    <a data-toggle="dropdown" class="dropdown-toggle" href="#">Information <b class="caret"></b></a>
+                    <ul role="menu" class="dropdown-menu">
+                        <li><a href="curriculum.php">Curriculum</a></li>
+                        <li><a href="rules.php">Rules and Regulations</a></li>
+                        <li><a href="sports.php">Sports</a></li>
+                        <li><a href="feest.php">Fee Structure</a></li>
+                        <li><a href="achievements.php">Achievements</a></li>
+                        <li><a href="scholarship.php">Scholarship</a></li>
+                    </ul>
+                </li>
+                <li class="dropdown">
+                    <a data-toggle="dropdown" class="dropdown-toggle" href="#">Notice Board<b class="caret"></b></a>
+                    <ul role="menu" class="dropdown-menu">
+                        <li><a href="/img/epfo2025.pdf">Epfo-Form 5A</a></li>
+                        <li><a href="olympiad.php">Olympiad</a></li>
+                        <li><a href="/img/tc2019.pdf">TC</a></li>
+                        <li><a href="avishkar-quiz.php">Avishkar Quiz</a></li>
+                        <li><a href="health-club.php">Health Club</a></li>
+                        <li><a href="newresult.php">Board Exam Result</a></li>
+                        <li><a href="/img/RESULT-18.pdf">Board Exam Result-2018-19</a></li>
+                        <li><a href="/img/RESULTS 19.pdf">Board Exam Result-2019-20</a></li>
+                        <li><a href="/img/xiixstdresult2021p.pdf">Board Exam Result-2021-2022</a></li>
+                    </ul>
+                </li>
+                <li class="dropdown">
+                    <a data-toggle="dropdown" class="dropdown-toggle" href="#">Co-Curricular <b class="caret"></b></a>
+                    <ul role="menu" class="dropdown-menu">
+                        <li><a href="scout.php">Scout</a></li>
+                        <li><a href="ncc.php">Ncc</a></li>
+                        <li><a href="#">Fine Arts</a></li>
+
+                    </ul>
+                </li>
+                <li><a href="contactus.php">Contact Us</a></li>
+                <li><a href="#">Oasis</a></li>
+                <!--<li><a href="https://www.moderncbsechennai.com/freceipt.php">Download Fee Receipt<img src="img/new.gif"style="width:60px;height:30px;"></a></li>
+				<li ><a href="https://www.nvsp.in/">Registration of New Voters<img src="img/new.gif"style="width:60px;height:30px;"></a></li>
+				
+            </ul>-->
+
+        </div>
+    </nav>
+
+
+    <div class="container">
+        <div class="row">
+            <div class="col-xs-12 col-lg-12 col-sm-12 col-md-12">
+                <div class="col-xs-2 col-lg-2 col-sm-2 col-md-2">
+                    <img src="img/flash1.gif" alt="flash">
+                </div>
+                <!--<div class="col-xs-15 col-lg-15 col-sm-15 col-md-15">
+			<marquee><h4 class="text-center"><a href = "/img/chess3.pdf"><font color="White"><img src="img/c1.gif"style="width:60px;height:30px;">....12TH INTERNATIONAL RATING CHESS TOURNAMENT-2019 </h4></marquee>-->
+                <div class="col-xs-10 col-lg-10 col-sm-10 col-md-10">
+                    <marquee scrollamount="4">
+                        <h3 class="text-center">
+                            <a href="https://www.moderncbsechennai.com/xresult2025.php">
+                                <font color="White"><img src="img/c1.gif" alt="admission details." style="width:60px;height:30px;"> CBSE Board Exam Result For Class X (2024-2025)......................... </h3>
+                    </marquee>
+                    <!--<marquee scrollamount="4"><h3 class="text-center"><a href = "http://www.moderncbsechennai.com/oclass2022.php"><font color="White"><img src="img/newn.gif"alt="old admission detais." style="width:68px;height:38px;">(New Update on 27-01-2024) Admission info for  Pre Primary and other classes-2024-2025  </h3></marquee>-->
+
+                    <marquee scrollamount="4">
+                        <h3 class="text-center">
+                            <a href="https://www.moderncbsechennai.com/xxiiresult2025.php">
+                                <font color="White"><img src="img/c1.gif" alt="Fee portals." style="width:60px;height:30px;"> CBSE Board Exam Result For Class XII (2024-2025)............</h3>
+                    </marquee>
+                    <div class="col-xs-15 col-lg-15 col-sm-15 col-md-15">
+                        <!--<marquee><h4 class="text-center"><a href = "/img/Mchees.pdf"><font color="White"><img src="img/c1.gif"style="width:60px;height:30px;">....13TH INTERNATIONAL RATING CHESS TOURNAMENT-2022..... </h4></marquee>-->
+                        <!--<div class="col-xs-15 col-lg-15 col-sm-15 col-md-15">
+			<marquee><h3 class="text-center"><a href = "#"><font color="White"><img src="img/c1.gif"style="width:60px;height:30px;">Parents can apply for TRANSFER CERTIFICATE on or before 31-03-2022.Request for T.C after 01-04-2022 will be considered only after payment of Ist term fee for next academic year....
+    </h3></marquee>-->
+                    </div>
+                </div>
+            </div>
+        </div>
+        <style>
+            .myDiv {
+                text-align: center;
+            }
+        </style>
+        <!--<div class="myDiv">
+	<h2 align="center" class="head-font"><u>RAMA NAVAMI CELEBRATION -21ST-APRIL-2021</u>
+	</h2>
+					<h3 align="center" class="head-font">DEPICTING OUR EPIC "SRI RAMAYANA" THROUGH BHARATANATIYAM - PERFORMED BY OUR SCHOOL STUDENT AMIRTHA.R OF CLASS VIII D
+	</h3>
+ <iframe width="800" height="513" src="https://www.youtube.com/embed/nSOfh_hYBtw" title="YouTube video player" frameborder="1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+				</div></br>-->
+        <div class="row">
+            <div id="myCarousel" class="carousel slide" data-ride="carousel">
+                <!-- Carousel indicators -->
+                <ol class="carousel-indicators">
+                    <!--<li data-target="#myCarousel" data-slide-to="0" class="active"></li>-->
+                    <li data-target="#myCarousel" data-slide-to="1" class="active"></li>
+                    <li data-target="#myCarousel" data-slide-to="2"></li>
+                    <li data-target="#myCarousel" data-slide-to="3"></li>
+                    <li data-target="#myCarousel" data-slide-to="5"></li>
+                    <li data-target="#myCarousel" data-slide-to="6"></li>
+                    <!-- <li data-target="#myCarousel" data-slide-to="7"></li>
+			<li data-target="#myCarousel" data-slide-to="8"></li>
+			<li data-target="#myCarousel" data-slide-to="9"></li>
+			<li data-target="#myCarousel" data-slide-to="10"></li>
+			<li data-target="#myCarousel" data-slide-to="11"></li>
+			<li data-target="#myCarousel" data-slide-to="12"class="active"></li> 
+			<li data-target="#myCarousel" data-slide-to="13"class="active"></li>--->
+                </ol>
+                <!-- Wrapper for carousel items -->
+                <div class="carousel-inner" align="center">
+                    <!--<div class="item active">
+                <img src="img/NEWYEAR2024.jpg"  width="800" height="513" alt="First Slide">
+            </div>-->
+
+                    <!-- <div class="item active"> -->
+                    <!--<iframe src="https://www.youtube.com/embed/7dN7Dh0VTlY" title="74TH REPUBLIC DAY CELEBRATION FROM MODERN SENIOR SECONDARY SCHOOL-2023" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen width="800" height="513" alt="thirthen Slide"></iframe>-->
+                    <!--<img src="img/NEWYEAR2024.jpg"  width="800" height="513" alt="First Slide">-->
+                    <!-- </div> -->
+                    <div class="item active">
+                        <img src="img/PRESEDENTFLAG.jpg" width="800" height="513" alt="First Slide">
+                    </div>
+                    <div class="item">
+                        <img src="img/2025001.jpg" width="800" height="513" alt="First Slide">
+                    </div>
+                    <div class="item">
+                        <img src="img/2025002.jpg" width="800" height="513" alt="First Slide">
+                    </div>
+                    <div class="item">
+                        <img src="img/OTHER SCHOO 3.jpg" width="800" height="513" alt="First Slide">
+                    </div>
+                    <div class="item">
+                        <img src="img/OTHER SCHOOL copy_comp.jpg" width="800" height="513" alt="First Slide">
+                    </div>
+                    <!---<div class="item">
+			<img src="img/232.jpg"  width="800" height="513" alt="First Slide">	
+            </div>
+			<div class="item">
+			<img src="img/233.jpg"  width="800" height="513" alt="First Slide">	
+            </div>
+			<div class="item">
+			<img src="img/234.jpg"  width="800" height="513" alt="First Slide">	
+            </div>
+			<div class="item">
+			<img src="img/235.jpg"  width="800" height="513" alt="First Slide">	
+            </div>
+			<div class="item">
+			<img src="img/78th indipendance yoga.jpg"  width="800" height="513" alt="First Slide">	
+            </div>
+			<div class="item">
+                <img src="img/20232.jpg"  width="800" height="513" alt="thirthen Slide">
+            </div>
+			<div class="item">
+                <img src="img/20231.jpg"  width="800" height="513" alt="thirthen Slide">
+            </div>
+            <div class="item" align="center">
+                <img src="imager/cr.jpg" width="800" height="513" alt="Second Slide">
+            </div>
+			<div class="item">
+                <img src="img/v1.jpg" width="800" height="513" alt="Third Slide">
+            </div>
+			<div class="item">
+                <img src="img/KAL.jpg" width="800" height="513" alt="Fourth Slide">
+            </div>
+			<div class="item">
+                <img src="img/c.jpg" width="800" height="513" alt="Fifth Slide">
+            </div>
+			<div class="item">
+                <img src="img/p.jpg" width="800" height="513" alt="Sixth Slide">
+            </div>
+			<div class="item">
+                <img src="img/vi3.jpg" width="800" height="513" alt="Seventh Slide">
+            </div>
+			<div class="item">
+                <img src="img/press.jpg" width="800" height="513" alt="Eight Slide">
+            </div>
+			<div class="item">
+                <img src="img/inven.jpg" width="800" height="513" alt="Ninth Slide">
+            </div>
+			<div class="item">
+                <img src="img/school.jpg" width="800" height="513" alt="Tenth Slide">
+            </div>
+			<div class="item">
+                <img src="img/yoga23.jpeg" width="800" height="513" alt="Eleventh Slide">
+            </div> -->
+                </div>
+                <!-- Carousel controls -->
+                <a class="carousel-control left" href="#myCarousel" data-slide="prev">
+            <span class="glyphicon glyphicon-chevron-left"></span>
+        </a>
+                <a class="carousel-control right" href="#myCarousel" data-slide="next">
+            <span class="glyphicon glyphicon-chevron-right"></span>
+        </a>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-xs-12 col-lg-12 col-sm-12 col-md-12">
+                <h2 align="center" class="head-font">WELCOME TO MODERN SENIOR SECONDARY SCHOOL<br> CBSE NEW GENERATION SCHOOL
+                </h2>
+                <p align="center" class="mycus">Modern Senior Secondary School, AG’s office colony, Chennai – 61.</p>
+                <p class="mycus1" style="text-align:justify">Modern Senior Secondary School founded in the year 1969, has been affiliated to the Central Board of Secondary Education, New Delhi since 1977.It is managed by MIES. The MIES, Modern Indian Educational Society was formed and registered
+                    in the year 1974 under the Societies Registration Act,1860 (Act #XXI of 1860). The core objective of this society is to Manage, Improve and Develop Modern Senior Secondary School, A.G.’s office colony, Nanganallur. Our School has got
+                    Provisional Affiliation up to 31-03-2029. The School provides its students with vibrant education programme and strives to provide an academically challenging environment in order to foster intellectual curiosity and sense of responsibility
+                    in our students. The School has the best learning environment with excellent physical infrastructure and top human capital. Our dedicated teachers inspire our students to achieve the highest possible academic standards while focusing
+                    on the needs of the individual.
+                </p>
+
+
+
+
+                <div class="table-responsive">
+                    <style type="text/css">
+                        .tg {
+                            border-collapse: collapse;
+                            border-color: #C44D58;
+                            border-spacing: 0;
+                        }
+
+                        .tg td {
+                            background-color: #F9CDAD;
+                            border-color: #C44D58;
+                            border-style: solid;
+                            border-width: 1px;
+                            color: #002b36;
+                            font-family: Arial, sans-serif;
+                            font-size: 14px;
+                            overflow: hidden;
+                            padding: 10px 5px;
+                            word-break: normal;
+                        }
+
+                        .tg th {
+                            background-color: #FE4365;
+                            border-color: #C44D58;
+                            border-style: solid;
+                            border-width: 1px;
+                            color: #fdf6e3;
+                            font-family: Arial, sans-serif;
+                            font-size: 14px;
+                            font-weight: normal;
+                            overflow: hidden;
+                            padding: 10px 5px;
+                            word-break: normal;
+                        }
+
+                        .tg .tg-5ztr {
+                            background-color: #cbcefb;
+                            border-color: inherit;
+                            font-weight: bold;
+                            text-align: left;
+                            vertical-align: top
+                        }
+
+                        .tg .tg-u0o7 {
+                            border-color: inherit;
+                            font-weight: bold;
+                            text-align: left;
+                            text-decoration: underline;
+                            vertical-align: top
+                        }
+
+                        .tg .tg-euiq {
+                            background-color: #1e98e2;
+                            border-color: inherit;
+                            font-weight: bold;
+                            text-align: left;
+                            vertical-align: top
+                        }
+
+                        .tg .tg-7btt {
+                            border-color: inherit;
+                            font-weight: bold;
+                            text-align: center;
+                            vertical-align: top
+                        }
+
+                        .tg .tg-fymr {
+                            border-color: inherit;
+                            font-weight: bold;
+                            text-align: left;
+                            vertical-align: top
+                        }
+
+                        .tg .tg-0pky {
+                            border-color: inherit;
+                            text-align: left;
+                            vertical-align: top
+                        }
+
+                        .tg .tg-98fa {
+                            background-color: #329a9d;
+                            border-color: inherit;
+                            font-weight: bold;
+                            text-align: left;
+                            text-decoration: underline;
+                            vertical-align: top
+                        }
+
+                        .tg .tg-wvli {
+                            background-color: #cd9934;
+                            border-color: inherit;
+                            font-weight: bold;
+                            text-align: left;
+                            text-decoration: underline;
+                            vertical-align: top
+                        }
+                    </style>
+                    <table class="tg">
+                        <thead>
+                            <tr>
+                                <th class="tg-7btt" colspan="6" style="opacity: 1; color: rgb(255, 255, 255); background-color: rgb(200, 35, 60);">MANDATORY PUBLIC DISCLOSURE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="tg-u0o7" colspan="6">A) GENERAL INFORMATION:</td>
+                            </tr>
+                            <tr>
+                                <td class="tg-fymr">SL.NO</td>
+                                <td class="tg-fymr">
+                                    <center>INFORMATION</center>
+                                </td>
+                                <td class="tg-fymr" colspan="6">
+                                    <center>DETAILS</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">1</td>
+                                <td class="tg-0pky">NAME OF THE SCHOOL</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>MODERN SENIOR SECONDARY SCHOOL</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">2</td>
+                                <td class="tg-0pky">AFFILIATION NO</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>1930031</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">3</td>
+                                <td class="tg-0pky">SCHOOL CODE</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>55034</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">4</td>
+                                <td class="tg-0pky">COMPLETE ADDRESS</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>MODERN SCHOOL ROAD,AGS OFFICE COLONY, NANGANALLUR, CHENNAI-600061</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">5</td>
+                                <td class="tg-0pky">PRINCIPAL NAME &amp; QUALIFICATION</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>Smt. SRIPRIYA RAJARAJAN.</br>
+                                        <center> M.Sc.,M.Phil.,B.Ed</center>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">6</td>
+                                <td class="tg-0pky">SCHOOL EMAIL ID</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>modernnglr2019@gmail.com</center>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">7</td>
+                                <td class="tg-0pky">CONTACT DETAILS</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>044-22241854</center>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td class="tg-98fa" colspan="6" style="opacity: 1; color: rgb(255, 255, 255); background-color: rgb(0, 102, 105);">B) DOCUMENTS AND INFORMATION:</td>
+                            </tr>
+                            <tr>
+                                <td class="tg-fymr">SL.NO</td>
+                                <td class="tg-fymr">
+                                    <center>DOCUMENTS AND INFORMATION</center>
+                                </td>
+                                <td class="tg-fymr" colspan="6">
+                                    <center>UPLOAD DOCUMENTS</center>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">1</td>
+                                <td class="tg-0pky">COPIES OF AFFILATION/UPGRADATION LETTER AND RECENT EXTENSION OF AFFILIATION</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="/img/AFFILATION2024.pdf" class="myButton">CLICK HERE</a></center>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">2</td>
+                                <td class="tg-0pky">COPIES OF SOCIETIES/TRUST/COMPANY REGISTRATION/RENEWAL CERTIFICATE</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="/img/SOCIETY affidavit.pdf" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">3</td>
+                                <td class="tg-0pky">COPY OF NO OBJECTION CERTIFICATE (NOC)</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="/img/NOC Certificate.pdf" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">4</td>
+                                <td class="tg-0pky">COPIES OF RECOGNITION CERTIFICATE UNDER RTE ACT</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="/img/RECOGNITION UPTO 2025_compressed.pdf" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">5</td>
+                                <td class="tg-0pky">COPY OF VALID BUILDING SAFETY CERTIFICATE AS PER THE NATIONAL BUILDING CODE</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="#" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">6</td>
+                                <td class="tg-0pky">COPY OF VALID FIRE SAFETY CERTIFICATE ISSUED BY THE COMPETENT AUTHORITY</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="#" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">7</td>
+                                <td class="tg-0pky">COPY OF THE DEO CERTIFICATE SUBMITTED BY THE SCHOOL FOR AFFILIATION/UPGRADATION/ EXTENSION OF AFFILIATION OF SELF CERTIFCATION BY SCHOOL</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="/img/B7 AFFIDAVIT UPLOAD.pdf" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">8</td>
+                                <td class="tg-0pky">COPIES OF VALID WATER, HEALTH AND SANITATION CERTIFICATES</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="#" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+
+                            <tr>
+                                <td class="tg-wvli" colspan="6">C) RESULT AND ACADEMICS</td>
+                            </tr>
+                            <tr>
+                                <td class="tg-fymr">S.NO</td>
+                                <td class="tg-fymr">
+                                    <center>DOCUMENTS/INFORMATION</center>
+                                </td>
+                                <td class="tg-fymr" colspan="6">
+                                    <center>UPLOAD DOCUMENTS</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">1</td>
+                                <td class="tg-0pky">FEE STRUCTURE OF THE SCHOOL</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="http://www.moderncbsechennai.com/feest.php" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">2</td>
+                                <td class="tg-0pky">ANNUAL ACADEMIC CALANDER</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="/img/Academic Calendar 2024 - 2025.pdf" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">3</td>
+                                <td class="tg-0pky">LIST OF SCHOOL MANAGEMENT COMMITTEE(SMC)</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="/img/NEW SMC MEMBER2026 2022-2025.pdf" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">4</td>
+                                <td class="tg-0pky">LIST OF PARENTS TEACHERS ASSOCIATION(PTA) MEMBERS</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="#" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">5</td>
+                                <td class="tg-0pky" colspan="6">LAST THREE-YEAR RESULT OF THE BOARD EXAMINATION AS PER APPLICABLILITY</td>
+
+                            </tr>
+
+                            <tr>
+                                <td class="tg-euiq" colspan="6">
+                                    <center>RESULT CLASS : X</center>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">S.NO</td>
+                                <td class="tg-0pky">YEAR</td>
+                                <td class="tg-0pky">NO.OF REGISTERED STUDENTS</td>
+                                <td class="tg-0pky">NO.OF STUDENTS PASSED</td>
+                                <td class="tg-0pky">PASS PERCETNAGE</td>
+                                <td class="tg-0pky">REMARKS</td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">
+                                    <center>1.</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>2022</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>213</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>213</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>100%</center>
+                                </td>
+                                <td class="tg-0pky"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">
+                                    <center>2.</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>2023</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>209</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>209</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>100%</center>
+                                </td>
+                                <td class="tg-0pky"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">
+                                    <center>3.</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>2024</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>196</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>196</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>100%</center>
+                                </td>
+                                <td class="tg-0pky"></td>
+                            </tr>
+
+                            <tr>
+                                <td class="tg-5ztr" colspan="6">
+                                    <center>RESULT CLASS : XII</center>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">S.NO</td>
+                                <td class="tg-0pky">YEAR</td>
+                                <td class="tg-0pky">NO.OF REGISTERED STUDENTS</td>
+                                <td class="tg-0pky">NO.OF STUDENTS PASSED</td>
+                                <td class="tg-0pky">PASS PERCENTAGE</td>
+                                <td class="tg-0pky">REMARKS</td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">
+                                    <center>1.</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>2022</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>179</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>179</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>100%</center>
+                                </td>
+                                <td class="tg-0pky"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">
+                                    <center>2.</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>2023</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>178</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>178</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>100%</center>
+                                </td>
+                                <td class="tg-0pky"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">
+                                    <center>3.</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>2024</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>165</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>165</center>
+                                </td>
+                                <td class="tg-0pky">
+                                    <center>100%</center>
+                                </td>
+                                <td class="tg-0pky"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-wvli" colspan="6">D) STAFF (TEACHING)</td>
+                            </tr>
+                            <tr>
+                                <td class="tg-fymr">S.NO</td>
+                                <td class="tg-fymr">
+                                    <center>INFORMATION</center>
+                                </td>
+                                <td class="tg-fymr" colspan="6">
+                                    <center>DETAILS</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">1</td>
+                                <td class="tg-0pky">PRINCIPAL</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>1</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">2</td>
+                                <td class="tg-0pky">TOTAL NO.OF TEACHERS :</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>108</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky"></td>
+                                <td class="tg-0pky">*PGT</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>14</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky"></td>
+                                <td class="tg-0pky">*TGT</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>42</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky"></td>
+                                <td class="tg-0pky">*PRT</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>35</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">3</td>
+                                <td class="tg-0pky">TEACHERS SECTION RATIO</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>1:1.5</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">4</td>
+                                <td class="tg-0pky">DETAILS OF SPECIAL EDUCATOR</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>1</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">5</td>
+                                <td class="tg-0pky">DETAILS OF COUNSELLOR AND WELNESS TEACHER</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>2</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-wvli" colspan="6">E) SCHOOL INFRASTRUCTURE :</td>
+                            </tr>
+                            <tr>
+                                <td class="tg-fymr">S.NO</td>
+                                <td class="tg-fymr">
+                                    <center>INFORMATION</center>
+                                </td>
+                                <td class="tg-fymr" colspan="6">
+                                    <center>DETAILS</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">1</td>
+                                <td class="tg-0pky">TOTAL CAMPUSE AREA OF THE SCHOOL(IN SQUARE MTR)</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>6168</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">2</td>
+                                <td class="tg-0pky">NO AND SIZE OF THE CLASS ROOMS (IN SQFT MTR)</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>85 & 46.45</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">3</td>
+                                <td class="tg-0pky">NO. AND SIZE OF LABORATORIES INCLUDING COMPUTER LABS (IN SQ MTR)</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="/img/E3 LAB DETAILS2023N.pdf" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">4</td>
+                                <td class="tg-0pky">INTERNET FACILITY (Y/N)</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>YES</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">5</td>
+                                <td class="tg-0pky">NO.OF GIRLS TOILETS</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>46 TOILETS AND 13 URINALS</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">6</td>
+                                <td class="tg-0pky">NO.OF BOYS TOILETS/URINALS</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center>19 TOILETS AND 65 URINALS</center>
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td class="tg-0pky">7</td>
+                                <td class="tg-0pky">LINK OF YOUTUBE VIDEO OF THE INSPECTION OF SCHOOL COVERING THE INFRASTRUCTURE OF THE SCHOOL.</td>
+                                <td class="tg-0pky" colspan="6">
+                                    <center><a href="https://youtu.be/H19A8mp2awY" class="myButton">CLICK HERE</a></center>
+                                </td>
+
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- jQuery library -->
+        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+        <!-- Bootstrap JS -->
+        <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+
+        <!-- Initialize Bootstrap functionality -->
+        <script>
+            // Initialize tooltip component
+            $(function() {
+                $('[data-toggle="tooltip"]').tooltip()
+            })
+
+            // Initialize popover component
+            $(function() {
+                $('[data-toggle="popover"]').popover()
+            })
+        </script>
+
+    </div>
+    <hr>
+    <div class="row">
+        <div class="col-xs-12 col-lg-12 col-md-12 col-sm-12">
+            <footer>
+                <p class="val-back">Developed By Msss</p>
+            </footer>
+        </div>
+    </div>
+
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,10 @@
+fastapi==0.95.2
+uvicorn[standard]==0.22.0
+langchain-ollama==0.0.0  # replace with the correct package name/version you use
+langchain-community==0.0.0
+faiss-cpu==1.7.3
+sympy==1.12
+numpy==1.26.0
+pydantic==1.10.10
+python-multipart==0.0.6
+
