@@ -1,6 +1,6 @@
 fastapi==0.95.2
 uvicorn[standard]==0.22.0
-langchain-ollama==1.0.0  # replace with the correct package name/version you use
+langchain-community==0.3.31  # replace with the correct package name/version you use
 langchain-community==0.0.0
 faiss-cpu==1.7.3
 sympy==1.12
