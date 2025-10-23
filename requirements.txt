@@ -1,1 +1,9 @@
-poetry install
+fastapi
+uvicorn[standard]
+langchain_ollama
+langchain_community
+faiss-cpu
+sympy
+numpy
+python-multipart
+pydantic
