@@ -1,0 +1,14 @@
+[
+  {
+    "question": "what can u provide me with",
+    "answer": "I’m here to share school-related information and help you find what you need!"
+  },
+  {
+    "question": "what is momentum",
+    "answer": "Hmm, that's an interesting question! Momentum isn't typically a concept we discuss in school, but I can try to help you understand it. In physics, momentum is the product of an object's mass and its velocity. It's a measure of an object's resistance to changes in its motion.\n\nFor example, imagine you're playing soccer with your friends. If you kick a ball with a lot of force, it will have more momentum than if you kicked it gently. The ball's momentum is related to how hard it's moving and how much mass it has (like the size of the ball).\n\nIn everyday life, we often see examples of momentum in action, like when a car accelerates or when a bike rider pedals quickly.\n\nIf you're interested in learning more about physics or specific topics like momentum, feel free to ask!"
+  },
+  {
+    "question": "formula",
+    "answer": "The fee structure seems to be based on a semester-wise and annual fee system. It appears that the fees are calculated as follows:\n\n* Annual Fee (also known as Tuition Fee): This is the fixed amount charged every year for one student.\n* Book Fees: This includes costs related to textbooks, stationery, etc., which vary from grade level to grade level.\n* Amenity Fee: This covers various expenses such as school infrastructure, sports facilities, etc.\n* TERM-Total: This calculates the total fees payable by a student for each term (semester), taking into account the annual fee, tuition fee, book fees, and amenity fee.\n\nIt seems like there's an additional \"TERM\" component that adds up to the grand total at the end of each term."
+  }
+]
