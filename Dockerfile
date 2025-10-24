@@ -25,4 +25,6 @@ COPY . .
 # CMD ["gunicorn", "--bind", "0.0.0.0:8080", "api:app"]
 
 # replace the last line with this:
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080"]
+# CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080"]
+# In Dockerfile (replace last line)
+CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8080}"]
