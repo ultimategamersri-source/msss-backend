@@ -1,5 +1,5 @@
-const API = "https://msss-backend-665722959305.asia-south1.run.app";  // Cloud Run backend URL
-
+//const API = "https://msss-backend-665722959305.asia-south1.run.app";  // Cloud Run backend URL
+const API = "/api";
 // Example test call
 fetch(`${API}/health`)
   .then(res => res.json())
