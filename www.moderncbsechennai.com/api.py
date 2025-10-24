@@ -224,17 +224,6 @@ def retrieve_relevant_memory(question: str, top_n=5):
     return "\n".join(top_entries)
 
 
-app = FastAPI()
-
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # replace "*" with your Netlify domain in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # ----------------------
 # Static assets
