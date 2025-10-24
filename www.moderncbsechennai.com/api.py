@@ -751,13 +751,21 @@ Answer:
 # ----------------------
 # Startup & Shutdown
 # ----------------------
+import os  # add this if not present
+
 @app.on_event("startup")
 def startup_event():
     print("🚀 Server starting up...")
     cleanup_old_sessions(max_files=10)
-    refresh_vector_stores()
-    load_ncert_vectors()
-    print("✅ Vector stores + NCERT data loaded.")
+
+    refresh_flag = os.getenv("REFRESH_VECTORS_ON_STARTUP", "false").lower() == "true"
+    if refresh_flag:
+        refresh_vector_stores()
+        load_ncert_vectors()
+        print("✅ Vector stores + NCERT data loaded.")
+    else:
+        print("⏭️ Skipping vector refresh/load on startup (REFRESH_VECTORS_ON_STARTUP=false).")
+
 
 
 @app.on_event("shutdown")
