@@ -25,6 +25,16 @@ session_memory = []
 os.makedirs("vectorstore", exist_ok=True)
 os.makedirs("sessions", exist_ok=True)
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://stirring-duckanoo-5bd4d6.netlify.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 def solve_math_expression(expr: str):
     """
@@ -34,6 +44,7 @@ def solve_math_expression(expr: str):
     - Scientific computation via SymPy + math
     - Safe eval
     """
+
     try:
         import sympy as sp
         expr = expr.lower().replace('^', '**').replace('×', '*').replace('÷', '/').strip()
