@@ -12,7 +12,7 @@ from datetime import datetime
 import math
 import numpy as np  # for matrix, arrays, scientific math
 import re
-
+from langchain_google_vertexai import VertexAI, VertexAIEmbeddings
 # ----------------------
 # Conversational Memory Helpers
 # ----------------------
@@ -25,8 +25,13 @@ from pydantic import BaseModel
 # ----------------------
 # Embedding model + memory
 # ----------------------
-embedding_model = OllamaEmbeddings(model="llama3.2")
-
+#embedding_model = OllamaEmbeddings(model="llama3.2")
+# NEW
+embedding_model = VertexAIEmbeddings(
+    model_name="text-embedding-004",
+    project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+    location=os.getenv("GOOGLE_CLOUD_LOCATION", "asia-south1"),
+)
 conversation_history = []
 session_memory = []
 
@@ -224,7 +229,9 @@ def retrieve_relevant_memory(question: str, top_n=5):
     return "\n".join(top_entries)
 
 
-
+# ----------------------
+# Static assets
+# ----------------------
 # ----------------------
 # Static assets
 # ----------------------
@@ -240,7 +247,6 @@ if os.path.isdir("dist"):
     app.mount("/dist", StaticFiles(directory="dist"), name="dist")
 
 
-
 @app.get("/")
 def index():
     return FileResponse("index.html")
@@ -249,9 +255,19 @@ def index():
 # ----------------------
 # LLMs
 # ----------------------
-answer_llm = OllamaLLM(model="llama3.2")
-emotion_llm = OllamaLLM(model="llama3.2")
-
+#answer_llm = OllamaLLM(model="llama3.2")
+#emotion_llm = OllamaLLM(model="llama3.2")
+# NEW (pick Flash for speed/cost; you can use "gemini-1.5-pro" if you prefer)
+answer_llm = VertexAI(
+    model_name="gemini-1.5-flash",
+    project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+    location=os.getenv("GOOGLE_CLOUD_LOCATION", "asia-south1"),
+)
+emotion_llm = VertexAI(
+    model_name="gemini-1.5-flash",
+    project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+    location=os.getenv("GOOGLE_CLOUD_LOCATION", "asia-south1"),
+)
 # ----------------------
 # Manual cache
 # ----------------------
@@ -762,3 +778,4 @@ def shutdown_event():
         save_session_data(SESSION_FILE)
         cleanup_old_sessions(max_files=10)
         print(f"💾 Session data saved to {SESSION_FILE}")
+
