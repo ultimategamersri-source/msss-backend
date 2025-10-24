@@ -8,8 +8,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # System deps (add if you need e.g., libpq-dev, build-essential, etc.)
+# RUN apt-get update -y && apt-get install -y --no-install-recommends \
+#    curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# System deps (add libgomp1)
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-    curl ca-certificates && rm -rf /var/lib/apt/lists/*
+    curl ca-certificates libgomp1 && rm -rf /var/lib/apt/lists/*
+
 
 # Python deps
 COPY requirements.txt .
