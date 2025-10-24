@@ -241,9 +241,17 @@ app.add_middleware(
 # ----------------------
 # Static assets
 # ----------------------
-app.mount("/img", StaticFiles(directory="img"), name="img")
-app.mount("/css", StaticFiles(directory="css"), name="css")
-app.mount("/dist", StaticFiles(directory="dist"), name="dist")
+# Ensure directories exist (even if empty), then mount conditionally
+for _d in ("img", "css", "dist"):
+    os.makedirs(_d, exist_ok=True)
+
+if os.path.isdir("img"):
+    app.mount("/img", StaticFiles(directory="img"), name="img")
+if os.path.isdir("css"):
+    app.mount("/css", StaticFiles(directory="css"), name="css")
+if os.path.isdir("dist"):
+    app.mount("/dist", StaticFiles(directory="dist"), name="dist")
+
 
 
 @app.get("/")
