@@ -7,3 +7,5 @@ sympy
 numpy
 python-multipart
 pydantic
+langchain-google-vertexai==2.0.3
+google-cloud-aiplatform==1.71.1
