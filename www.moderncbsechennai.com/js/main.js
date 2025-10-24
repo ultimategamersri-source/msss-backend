@@ -7,7 +7,7 @@ const API = "/api";  // Netlify will forward to Cloud Run
 // Utility to show status or errors
 // -------------------------
 function showStatus(msg) {
-  console.log(msg); // You can connect this to your UI later
+  console.log(msg); // Hook this to your UI if you want
 }
 
 // -------------------------
@@ -16,6 +16,7 @@ function showStatus(msg) {
 async function ping() {
   try {
     const res = await fetch(`${API}/health`);
+    if (!res.ok) throw new Error(`Health ${res.status}`);
     const data = await res.json();
     console.log("✅ Backend Health:", data);
   } catch (err) {
@@ -34,13 +35,13 @@ async function chat(message) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message })
     });
-
     if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
     const data = await res.json();
     return data.reply;
   } catch (err) {
     console.error(err);
     showStatus("⚠️ Chat server error");
+    return null;
   }
 }
 
@@ -54,13 +55,13 @@ async function ask(question) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question })
     });
-
     if (!res.ok) throw new Error(`Ask failed: ${res.status}`);
     const data = await res.json();
     return data.answer;
   } catch (err) {
     console.error(err);
     showStatus("⚠️ Assistant server error");
+    return null;
   }
 }
 
@@ -74,23 +75,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const input = document.getElementById("user-input");
   const chatBox = document.getElementById("chat-box");
 
-  if (form) {
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const question = input.value.trim();
-      if (!question) return;
-
-      // Show user message in chat box
-      chatBox.innerHTML += `<div class="msg user">You: ${question}</div>`;
-
-      // Get assistant response
-      const reply = await ask(question);
-
-      // Show assistant reply
-      chatBox.innerHTML += `<div class="msg bot">Brightly: ${reply || "⚠️ Error replying"}</div>`;
-      chatBox.scrollTop = chatBox.scrollHeight;
-
-      input.value = "";
-    });
+  if (!form || !input || !chatBox) {
+    console.warn("Chat elements not found in DOM.");
+    return;
   }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const question = input.value.trim();
+    if (!question) return;
+
+    // Show user message in chat box
+    chatBox.innerHTML += `<div class="msg user">You: ${question}</div>`;
+
+    // Get assistant response
+    const reply = await ask(question);
+
+    // Show assistant reply
+    chatBox.innerHTML += `<div class="msg bot">Brightly: ${reply || "⚠️ Error replying"}</div>`;
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    input.value = "";
+  });
 });
