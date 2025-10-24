@@ -182,6 +182,8 @@
 </div>
 
 <script>
+const API = "/api";  // Netlify will forward to Cloud Run
+
 const chatBtn = document.getElementById('chat-btn');
 const chatWindow = document.getElementById('chat-window');
 const sendBtn = document.getElementById('send-btn');
@@ -209,14 +211,12 @@ header.addEventListener('mousedown', e => {
   offsetY = e.clientY - chatWindow.offsetTop;
   header.style.cursor = 'grabbing';
 });
-
 document.addEventListener('mousemove', e => {
-  if(isDragging){
+  if (isDragging){
     chatWindow.style.left = (e.clientX - offsetX) + 'px';
     chatWindow.style.top = (e.clientY - offsetY) + 'px';
   }
 });
-
 document.addEventListener('mouseup', () => {
   isDragging = false;
   header.style.cursor = 'grab';
@@ -229,11 +229,22 @@ function autoResizeTextarea(){
 }
 userInput.addEventListener('input', autoResizeTextarea);
 
+// ---- helper to call backend
+async function callAPI(path, payload) {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
+  return res.json();
+}
+
 // Send message
 async function sendMessage(){
-  if(waiting) return;
+  if (waiting) return;
   const text = userInput.value.trim();
-  if(!text) return;
+  if (!text) return;
 
   chatHistory.push({ type: 'user', text });
   renderMessages();
@@ -245,19 +256,18 @@ async function sendMessage(){
   waiting = true;
 
   try {
-    const response = await fetch('/ask', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ question: text })
-    });
-    const data = await response.json();
-    chatHistory.pop(); // remove thinking
+    const data = await callAPI('/ask', { question: text }); // <-- now /api/ask
+    chatHistory.pop(); // remove "thinking"
     chatHistory.push({ type: 'bot', text: data.answer });
     renderMessages();
-  } catch {
+  } catch (e) {
+    console.error(e);
+    chatHistory.pop();
     chatHistory.push({ type: 'bot', text: '⚠️ Server not reachable.' });
     renderMessages();
-  } finally { waiting = false; }
+  } finally {
+    waiting = false;
+  }
 }
 
 // Render messages
@@ -266,7 +276,7 @@ function renderMessages(){
   chatHistory.forEach(msg => {
     const bubble = document.createElement('div');
     bubble.className = `message ${msg.type}`;
-    if(msg.type==='bot'){
+    if (msg.type==='bot'){
       const icon = document.createElement('span');
       icon.className = 'icon';
       icon.textContent = '💡';
@@ -280,14 +290,15 @@ function renderMessages(){
 
 sendBtn.addEventListener('click', sendMessage);
 userInput.addEventListener('keydown', e => {
-  if(e.key==='Enter' && !e.shiftKey){
+  if (e.key==='Enter' && !e.shiftKey){
     e.preventDefault();
     sendMessage();
   }
 });
 
-// Initial render
+// Initial render + quick health ping
 renderMessages();
+fetch(`${API}/health`).then(r=>r.json()).then(d=>console.log("Backend:", d)).catch(()=>console.warn("Backend not reachable"));
 </script>
     <div class="container-fluid">
         <div class="jumbotron">
