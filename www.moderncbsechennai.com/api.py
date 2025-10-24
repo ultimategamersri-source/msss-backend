@@ -17,7 +17,14 @@ import re
 # Conversational Memory Helpers
 # ----------------------
 from langchain_ollama import OllamaEmbeddings
+import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
+# ----------------------
+# Embedding model + memory
+# ----------------------
 embedding_model = OllamaEmbeddings(model="llama3.2")
 
 conversation_history = []
@@ -26,40 +33,31 @@ session_memory = []
 os.makedirs("vectorstore", exist_ok=True)
 os.makedirs("sessions", exist_ok=True)
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
+# ----------------------
+# Single FastAPI instance ONLY (fixed)
+# ----------------------
 app = FastAPI()
 
-# If you ever call the Cloud Run URL directly from the browser, CORS helps.
-# With Netlify proxying /api/* you technically don't need this, but it doesn't hurt.
+# CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or restrict to ["https://stirring-duckanoo-5bd4d6.netlify.app"]
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-@app.get("/")
-def root():
-    return {"ok": True}
-
-
+# ----------------------
+# Basic Endpoints
+# ----------------------
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-
 @app.post("/chat")
 async def chat(payload: dict):
-    # simple echo so UI can render a response
     msg = payload.get("message", "")
     return {"reply": f"Echo: {msg}"}
+
 
 
 def solve_math_expression(expr: str):
