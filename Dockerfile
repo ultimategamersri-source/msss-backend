@@ -22,4 +22,4 @@ COPY . .
 # CMD ["bash", "start.sh"]
 
 # Otherwise, if it's a Flask/Django/Gunicorn app, use (edit module:app):
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "api:app"]
