@@ -25,15 +25,42 @@ session_memory = []
 os.makedirs("vectorstore", exist_ok=True)
 os.makedirs("sessions", exist_ok=True)
 
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
+app = FastAPI()
+
+# Allow your Netlify site to call the API directly (also works when using /api proxy)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://stirring-duckanoo-5bd4d6.netlify.app"],
+    allow_origins=[
+        "https://stirring-duckanoo-5bd4d6.netlify.app",
+        "http://localhost:8888",  # Netlify dev or local testing (optional)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def root():
+    return {"ok": True}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+# Simple chat endpoint (placeholder). Wire up your GenAI here later.
+# class ChatRequest(BaseModel):
+#     message: str
+
+# @app.post("/chat")
+# async def chat(req: ChatRequest):
+    # TODO: Replace this with your real GenAI pipeline (LangChain, Vertex AI, etc.)
+#     reply = f"Echo: {req.message}"
+#     return {"reply": reply}
+
 
 
 def solve_math_expression(expr: str):
