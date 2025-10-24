@@ -16,11 +16,20 @@ from langchain_google_vertexai import VertexAI, VertexAIEmbeddings
 # ----------------------
 # Conversational Memory Helpers
 # ----------------------
-from langchain_ollama import OllamaEmbeddings
+#from langchain_ollama import OllamaEmbeddings
+from langchain_google_vertexai import VertexAIEmbeddings
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+def get_embedding_model():
+    # construct on first use instead of at import time
+    return VertexAIEmbeddings(
+        model_name="text-embedding-004",
+        project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+        location=os.getenv("GOOGLE_CLOUD_LOCATION", "asia-south1"),
+    )
 
 # ----------------------
 # Embedding model + memory
@@ -179,26 +188,40 @@ def explain_math_step_by_step(expr: str):
         return None
 
 
+#def add_to_memory(question: str, answer: str):
+#    """Add question-answer pair to session memory with embeddings for internal use only."""
+#    try:
+#        embed = embedding_model.embed_query(question)
+#    except Exception as e:
+#        print(f"⚠️ Embedding error: {e}")
+#        embed = None
+#    session_memory.append(
+#        {
+#            "question": question,
+#            "answer": answer,
+#            "embedding": embed,  # internal only
+#        }
+#    )
+
 def add_to_memory(question: str, answer: str):
-    """Add question-answer pair to session memory with embeddings for internal use only."""
     try:
-        embed = embedding_model.embed_query(question)
+        embed = get_embedding_model().embed_query(question)
     except Exception as e:
         print(f"⚠️ Embedding error: {e}")
         embed = None
-    session_memory.append(
-        {
-            "question": question,
-            "answer": answer,
-            "embedding": embed,  # internal only
-        }
-    )
+    session_memory.append({"question": question, "answer": answer, "embedding": embed})
 
 
+#def retrieve_relevant_memory(question: str, top_n=5):
+#    """Retrieve top-N relevant past Q&A from session memory using embeddings similarity."""
+#    try:
+#        query_embed = embedding_model.embed_query(question)
+#    except Exception as e:
+#        print(f"⚠️ Embedding error: {e}")
+#        return ""
 def retrieve_relevant_memory(question: str, top_n=5):
-    """Retrieve top-N relevant past Q&A from session memory using embeddings similarity."""
     try:
-        query_embed = embedding_model.embed_query(question)
+        query_embed = get_embedding_model().embed_query(question)
     except Exception as e:
         print(f"⚠️ Embedding error: {e}")
         return ""
