@@ -29,16 +29,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI()
 
-# Allow your Netlify site to call the API directly (also works when using /api proxy)
+# If you ever call the Cloud Run URL directly from the browser, CORS helps.
+# With Netlify proxying /api/* you technically don't need this, but it doesn't hurt.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://stirring-duckanoo-5bd4d6.netlify.app",
-        "http://localhost:8888",  # Netlify dev or local testing (optional)
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],  # or restrict to ["https://stirring-duckanoo-5bd4d6.netlify.app"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -51,15 +51,12 @@ def root():
 def health():
     return {"status": "ok"}
 
-# Simple chat endpoint (placeholder). Wire up your GenAI here later.
-# class ChatRequest(BaseModel):
-#     message: str
+@app.post("/chat")
+async def chat(payload: dict):
+    # simple echo so UI can render a response
+    msg = payload.get("message", "")
+    return {"reply": f"Echo: {msg}"}
 
-# @app.post("/chat")
-# async def chat(req: ChatRequest):
-    # TODO: Replace this with your real GenAI pipeline (LangChain, Vertex AI, etc.)
-#     reply = f"Echo: {req.message}"
-#     return {"reply": reply}
 
 
 
