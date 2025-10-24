@@ -11,32 +11,52 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-# Vector store loader (ours)
-from vector import load_vector_store
+# ----------------------
+# Defaults for your deployment (can be overridden by env)
+# ----------------------
+DEFAULT_PROJECT = "vertex-ai-search-rag-project"
+DEFAULT_LOCATION = "asia-south1"
 
-# LangChain + Vertex AI
+def env(name: str, default: str | None = None) -> str | None:
+    return os.getenv(name, default)
+
+GOOGLE_CLOUD_PROJECT = env("GOOGLE_CLOUD_PROJECT", DEFAULT_PROJECT)
+GOOGLE_CLOUD_LOCATION = env("GOOGLE_CLOUD_LOCATION", DEFAULT_LOCATION)
+REFRESH_VECTORS_ON_STARTUP = env("REFRESH_VECTORS_ON_STARTUP", "true").lower() == "true"
+
+# ----------------------
+# Vector store loader (ours). Keep import inside try so app still boots if file missing.
+# ----------------------
+try:
+    from vector import load_vector_store
+except Exception as e:
+    load_vector_store = None
+    print(f"ℹ️ vector.py not available or failed to import: {e}")
+
+# LangChain + Vertex AI (lazy constructors below prevent init at import time)
 from langchain_google_vertexai import VertexAI, VertexAIEmbeddings
 
 # ----------------------
 # Helpers: lazy constructors (avoid init-at-import crashes on Cloud Run)
 # ----------------------
 def get_embedding_model():
-    # Construct only on first use, pulling project/region from env
+    # Construct only on first use, pulling project/region from env/defaults
     return VertexAIEmbeddings(
         model_name="text-embedding-004",
-        project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-        location=os.getenv("GOOGLE_CLOUD_LOCATION", "asia-south1"),
+        project=GOOGLE_CLOUD_PROJECT,
+        location=GOOGLE_CLOUD_LOCATION,
     )
 
 _answer_llm = None
 _emotion_llm = None
+
 def get_answer_llm():
     global _answer_llm
     if _answer_llm is None:
         _answer_llm = VertexAI(
             model_name="gemini-1.5-flash",
-            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-            location=os.getenv("GOOGLE_CLOUD_LOCATION", "asia-south1"),
+            project=GOOGLE_CLOUD_PROJECT,
+            location=GOOGLE_CLOUD_LOCATION,
         )
     return _answer_llm
 
@@ -45,8 +65,8 @@ def get_emotion_llm():
     if _emotion_llm is None:
         _emotion_llm = VertexAI(
             model_name="gemini-1.5-flash",
-            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-            location=os.getenv("GOOGLE_CLOUD_LOCATION", "asia-south1"),
+            project=GOOGLE_CLOUD_PROJECT,
+            location=GOOGLE_CLOUD_LOCATION,
         )
     return _emotion_llm
 
@@ -64,7 +84,7 @@ for _d in ("img", "css", "dist"):
 # ----------------------
 # Single FastAPI instance
 # ----------------------
-app = FastAPI()
+app = FastAPI(title="MSSS Backend", version="1.0.0")
 
 # CORS setup (widen as needed)
 app.add_middleware(
@@ -87,9 +107,15 @@ def index():
     # Return index.html if present, else a simple JSON (prevents boot failure)
     if os.path.exists("index.html"):
         return FileResponse("index.html")
-    return JSONResponse({"message": "Modern Senior Secondary School — API online"})
+    return JSONResponse({
+        "message": "Modern Senior Secondary School — API online",
+        "project": GOOGLE_CLOUD_PROJECT,
+        "location": GOOGLE_CLOUD_LOCATION,
+        "vectors_refreshed_on_startup": REFRESH_VECTORS_ON_STARTUP
+    })
 
 @app.get("/health")
+@app.get("/_/health")
 def health():
     return {"status": "ok"}
 
@@ -295,9 +321,12 @@ vector_stores = {}
 def refresh_vector_stores():
     """Build retrievers from all .txt files in ./data (if present)."""
     global vector_stores
+    vector_stores = {}
+    if load_vector_store is None:
+        print("ℹ️ load_vector_store unavailable; skipping vector build.")
+        return
     if not os.path.isdir("data"):
         print("ℹ️ No data directory found; skipping vector build.")
-        vector_stores = {}
         return
     current_files = {
         os.path.splitext(f)[0]: os.path.join("data", f)
@@ -305,9 +334,12 @@ def refresh_vector_stores():
         if f.endswith(".txt")
     }
     for name, file in current_files.items():
-        retriever = load_vector_store(file)
-        if retriever:
-            vector_stores[name] = retriever
+        try:
+            retriever = load_vector_store(file)
+            if retriever:
+                vector_stores[name] = retriever
+        except Exception as e:
+            print(f"⚠️ Failed to build retriever for '{file}': {e}")
     print(f"✅ Vector stores loaded: {list(vector_stores.keys())}")
 
 # ----------------------
@@ -342,12 +374,20 @@ NCERT_DATASETS = {
 }
 
 def load_ncert_vectors():
+    if load_vector_store is None:
+        print("ℹ️ load_vector_store unavailable; skipping NCERT.")
+        return
+    loaded = []
     for name, path in NCERT_DATASETS.items():
         if os.path.exists(path):
-            retriever = load_vector_store(path)
-            if retriever:
-                vector_stores[name] = retriever
-    print(f"📘 NCERT datasets loaded: {list(k for k, v in NCERT_DATASETS.items() if os.path.exists(v))}")
+            try:
+                retriever = load_vector_store(path)
+                if retriever:
+                    vector_stores[name] = retriever
+                    loaded.append(name)
+            except Exception as e:
+                print(f"⚠️ Failed to load NCERT '{name}': {e}")
+    print(f"📘 NCERT datasets loaded: {loaded}")
 
 # ----------------------
 # Query Model
@@ -542,16 +582,18 @@ def cleanup_old_sessions(max_files=10):
 @app.on_event("startup")
 def startup_event():
     print("🚀 Server starting up...")
+    print(f"   Project = {GOOGLE_CLOUD_PROJECT}")
+    print(f"   Location = {GOOGLE_CLOUD_LOCATION}")
+    print(f"   Refresh vectors on startup = {REFRESH_VECTORS_ON_STARTUP}")
     cleanup_old_sessions(max_files=10)
 
-    refresh_flag = os.getenv("REFRESH_VECTORS_ON_STARTUP", "false").lower() == "true"
-    if refresh_flag:
+    if REFRESH_VECTORS_ON_STARTUP:
         refresh_vector_stores()
         # Optional NCERT files if present
         load_ncert_vectors()
         print("✅ Vector stores + NCERT data loaded.")
     else:
-        print("⏭️ Skipping vector refresh/load on startup (REFRESH_VECTORS_ON_STARTUP=false).")
+        print("⏭️ Skipping vector refresh/load on startup.")
 
 @app.on_event("shutdown")
 def shutdown_event():
