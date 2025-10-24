@@ -1,19 +1,19 @@
-// ========= QUICK DIAGNOSTIC MAIN.JS =========
+// ========= MAIN.JS (Netlify -> Cloud Run) =========
 
-// 1) Try Netlify proxy first
-let API = "/api";
+// 1) Use Netlify proxy. Your _redirects already points /api/* to Cloud Run.
+const API = "/api";
 
-// 2) OPTIONAL: uncomment to bypass Netlify and hit Cloud Run directly
-// API = "https://msss-backend-665722959305.asia-south1.run.app";
-
-// helper to show status text on the page (creates a small banner)
-(function ensureStatusBanner(){
+// --- Small status banner so you can see connectivity at a glance
+(function ensureStatusBanner() {
   if (!document.getElementById("status-banner")) {
     const el = document.createElement("div");
     el.id = "status-banner";
-    el.style.cssText = "position:fixed;bottom:8px;left:8px;padding:6px 10px;font:12px/1.4 system-ui;background:#111;color:#fff;border-radius:6px;z-index:99999;opacity:.9";
+    el.style.cssText =
+      "position:fixed;bottom:8px;left:8px;padding:6px 10px;font:12px/1.4 system-ui;background:#111;color:#fff;border-radius:6px;z-index:99999;opacity:.9";
     el.textContent = "main.js loaded…";
-    document.addEventListener("DOMContentLoaded", () => document.body.appendChild(el));
+    document.addEventListener("DOMContentLoaded", () =>
+      document.body.appendChild(el)
+    );
   }
 })();
 function showStatus(msg) {
@@ -22,10 +22,7 @@ function showStatus(msg) {
   if (b) b.textContent = msg;
 }
 
-// quick logger so we know which JS file version is running
-console.log("🔧 main.js diagnostic loaded. API =", API);
-
-// Health check
+// --- Health check
 async function ping() {
   try {
     const res = await fetch(`${API}/health`, { cache: "no-store" });
@@ -39,25 +36,7 @@ async function ping() {
   }
 }
 
-// Chat
-async function chat(message) {
-  try {
-    const res = await fetch(`${API}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message })
-    });
-    if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
-    const data = await res.json();
-    return data.reply;
-  } catch (err) {
-    console.error(err);
-    showStatus("⚠️ Chat server error");
-    return null;
-  }
-}
-
-// Ask
+// --- Ask endpoint
 async function ask(question) {
   try {
     const res = await fetch(`${API}/ask`, {
@@ -71,11 +50,11 @@ async function ask(question) {
   } catch (err) {
     console.error(err);
     showStatus("⚠️ Assistant server error");
-    return null;
+    return "Sorry — I couldn’t reach the assistant. Please try again.";
   }
 }
 
-// UI wiring
+// --- UI wiring
 document.addEventListener("DOMContentLoaded", () => {
   ping(); // test immediately
 
@@ -95,9 +74,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!question) return;
 
     chatBox.innerHTML += `<div class="msg user">You: ${question}</div>`;
-    const reply = await ask(question);
-    chatBox.innerHTML += `<div class="msg bot">Brightly: ${reply || "⚠️ Error replying"}</div>`;
-    chatBox.scrollTop = chatBox.scrollHeight;
     input.value = "";
+    const reply = await ask(question);
+    chatBox.innerHTML += `<div class="msg bot">Brightly: ${reply}</div>`;
+    chatBox.scrollTop = chatBox.scrollHeight;
   });
 });
