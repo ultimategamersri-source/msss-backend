@@ -1,15 +1,27 @@
+# api.py
 import os
 import json
 import math
 import re
 import random
+import logging
 from datetime import datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+
+# ======================
+# Logging / Debug
+# ======================
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+logging.basicConfig(
+    level=logging.DEBUG if DEBUG else logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+log = logging.getLogger("msss")
 
 # ----------------------
 # Defaults for your deployment (can be overridden by env)
@@ -25,22 +37,22 @@ GOOGLE_CLOUD_LOCATION = env("GOOGLE_CLOUD_LOCATION", DEFAULT_LOCATION)
 REFRESH_VECTORS_ON_STARTUP = env("REFRESH_VECTORS_ON_STARTUP", "true").lower() == "true"
 
 # ----------------------
-# Vector store loader (ours). Keep import inside try so app still boots if file missing.
+# Vector store (lazy; app still boots if file missing)
 # ----------------------
 try:
     from vector import load_vector_store
 except Exception as e:
     load_vector_store = None
-    print(f"ℹ️ vector.py not available or failed to import: {e}")
+    log.info(f"ℹ️ vector.py not available or failed to import: {e}")
 
 # LangChain + Vertex AI (lazy constructors below prevent init at import time)
 from langchain_google_vertexai import VertexAI, VertexAIEmbeddings
 
 # ----------------------
-# Helpers: lazy constructors (avoid init-at-import crashes on Cloud Run)
+# Helpers: lazy constructors
 # ----------------------
 def get_embedding_model():
-    # Construct only on first use, pulling project/region from env/defaults
+    """Vertex embeddings for memory similarity search."""
     return VertexAIEmbeddings(
         model_name="text-embedding-004",
         project=GOOGLE_CLOUD_PROJECT,
@@ -75,26 +87,50 @@ def get_emotion_llm():
 # ----------------------
 conversation_history = []
 session_memory = []
+vector_stores = {}
 
 os.makedirs("vectorstore", exist_ok=True)
 os.makedirs("sessions", exist_ok=True)
 for _d in ("img", "css", "dist"):
     os.makedirs(_d, exist_ok=True)
 
-# ----------------------
-# Single FastAPI instance
-# ----------------------
+# ======================
+# FastAPI app + CORS
+# ======================
 app = FastAPI(title="MSSS Backend", version="1.0.0")
 
-# CORS setup (widen as needed)
+# CORS: lock to Netlify origin (+ optional local dev)
+netlify_origin = os.getenv("NETLIFY_ORIGIN", "").rstrip("/")
+extra_origins = [
+    o.strip().rstrip("/")
+    for o in os.getenv("EXTRA_CORS_ORIGINS", "").split(",")
+    if o.strip()
+]
+allow_localhost = os.getenv("ALLOW_LOCALHOST", "true").lower() == "true"
+local_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+] if allow_localhost else []
+
+allowed_origins = [o for o in [netlify_origin] if o] + extra_origins + local_origins
+if not allowed_origins:
+    # Fallback, but prefer explicit allowlist
+    allowed_origins = ["*"]
+
+log.info(f"🔐 CORS allow_origins = {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
-# Serve static if present
+# Static mounts (if present)
 if os.path.isdir("img"):
     app.mount("/img", StaticFiles(directory="img"), name="img")
 if os.path.isdir("css"):
@@ -102,9 +138,17 @@ if os.path.isdir("css"):
 if os.path.isdir("dist"):
     app.mount("/dist", StaticFiles(directory="dist"), name="dist")
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    if DEBUG:
+        log.debug(f"➡️  {request.method} {request.url.path}")
+    response = await call_next(request)
+    if DEBUG:
+        log.debug(f"⬅️  {request.method} {request.url.path} -> {response.status_code}")
+    return response
+
 @app.get("/")
 def index():
-    # Return index.html if present, else a simple JSON (prevents boot failure)
     if os.path.exists("index.html"):
         return FileResponse("index.html")
     return JSONResponse({
@@ -119,14 +163,25 @@ def index():
 def health():
     return {"status": "ok"}
 
+@app.get("/llm/health")
+def llm_health():
+    """
+    Quick Vertex AI ping to confirm model access.
+    """
+    try:
+        txt = get_answer_llm().invoke("Say: Ok!").strip()
+        return {"ok": bool(txt), "model": "gemini-1.5-flash", "text": txt or "(empty)"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
 @app.post("/chat")
 async def chat(payload: dict):
     msg = payload.get("message", "")
     return {"reply": f"Echo: {msg}"}
 
-# ----------------------
+# ======================
 # Math utilities
-# ----------------------
+# ======================
 def solve_math_expression(expr: str):
     """
     Degree-based trig; simple equation solving with SymPy; safe eval sandbox.
@@ -174,13 +229,13 @@ def solve_math_expression(expr: str):
         except Exception:
             pass
 
-        result = eval(expr, {"__builtins__": None}, allowed)  # noqa: S307 (guarded)
+        result = eval(expr, {"__builtins__": None}, allowed)  # guarded
         if isinstance(result, float):
             result = round(result, 6)
         return f"The result is {result}"
 
     except Exception as e:
-        print(f"⚠️ Math solver error: {e}")
+        log.warning(f"⚠️ Math solver error: {e}")
         return None
 
 
@@ -215,14 +270,14 @@ def explain_math_step_by_step(expr: str):
     except Exception:
         return None
 
-# ----------------------
+# ======================
 # Memory helpers
-# ----------------------
+# ======================
 def add_to_memory(question: str, answer: str):
     try:
         embed = get_embedding_model().embed_query(question)
     except Exception as e:
-        print(f"⚠️ Embedding error: {e}")
+        log.warning(f"⚠️ Embedding error: {e}")
         embed = None
     session_memory.append({"question": question, "answer": answer, "embedding": embed})
 
@@ -230,7 +285,7 @@ def retrieve_relevant_memory(question: str, top_n=5):
     try:
         query_embed = get_embedding_model().embed_query(question)
     except Exception as e:
-        print(f"⚠️ Embedding error: {e}")
+        log.warning(f"⚠️ Embedding error: {e}")
         return ""
 
     if not session_memory:
@@ -255,9 +310,9 @@ def retrieve_relevant_memory(question: str, top_n=5):
     top_entries = [f"Q: {e['question']}\nA: {e['answer']}" for _, e in scored[:top_n]]
     return "\n".join(top_entries)
 
-# ----------------------
+# ======================
 # Greetings / Farewells / Emotion
-# ----------------------
+# ======================
 GREETINGS = ["hello", "hi", "hey", "good morning", "good afternoon", "good evening"]
 FAREWELLS = ["bye", "goodbye", "see you", "farewell"]
 
@@ -303,12 +358,12 @@ Message: {user_input}
         elif resp == "Negative":
             return "I'm sorry if something felt off. Let’s fix it together."
     except Exception as e:
-        print(f"⚠️ Emotion detection error: {e}")
+        log.warning(f"⚠️ Emotion detection error: {e}")
     return None
 
-# ----------------------
+# ======================
 # Intent & Vector Stores
-# ----------------------
+# ======================
 INTENT_MAP = {
     "fees": ["fee", "fees", "structure", "tuition"],
     "staff": ["principal", "teacher", "staff"],
@@ -316,17 +371,15 @@ INTENT_MAP = {
     "self_identity": ["who are you", "your name", "what are you", "who created you"],
 }
 
-vector_stores = {}
-
 def refresh_vector_stores():
     """Build retrievers from all .txt files in ./data (if present)."""
     global vector_stores
     vector_stores = {}
     if load_vector_store is None:
-        print("ℹ️ load_vector_store unavailable; skipping vector build.")
+        log.info("ℹ️ load_vector_store unavailable; skipping vector build.")
         return
     if not os.path.isdir("data"):
-        print("ℹ️ No data directory found; skipping vector build.")
+        log.info("ℹ️ No data directory found; skipping vector build.")
         return
     current_files = {
         os.path.splitext(f)[0]: os.path.join("data", f)
@@ -339,12 +392,12 @@ def refresh_vector_stores():
             if retriever:
                 vector_stores[name] = retriever
         except Exception as e:
-            print(f"⚠️ Failed to build retriever for '{file}': {e}")
-    print(f"✅ Vector stores loaded: {list(vector_stores.keys())}")
+            log.warning(f"⚠️ Failed to build retriever for '{file}': {e}")
+    log.info(f"✅ Vector stores loaded: {list(vector_stores.keys())}")
 
-# ----------------------
+# ======================
 # Misc helpers
-# ----------------------
+# ======================
 def split_subquestions(q: str):
     if not any(sep in q.lower() for sep in [" and ", ";", "?"]):
         return [q.strip()]
@@ -364,9 +417,9 @@ def safe_retrieve(retriever, query):
         return retriever.get_relevant_documents(query)
     return retriever._get_relevant_documents(query, run_manager=None)
 
-# ----------------------
+# ======================
 # NCERT optional datasets (if present)
-# ----------------------
+# ======================
 NCERT_DATASETS = {
     "ncert_maths": "data/ncert_maths.txt",
     "ncert_physics": "data/ncert_physics.txt",
@@ -375,7 +428,7 @@ NCERT_DATASETS = {
 
 def load_ncert_vectors():
     if load_vector_store is None:
-        print("ℹ️ load_vector_store unavailable; skipping NCERT.")
+        log.info("ℹ️ load_vector_store unavailable; skipping NCERT.")
         return
     loaded = []
     for name, path in NCERT_DATASETS.items():
@@ -386,18 +439,34 @@ def load_ncert_vectors():
                     vector_stores[name] = retriever
                     loaded.append(name)
             except Exception as e:
-                print(f"⚠️ Failed to load NCERT '{name}': {e}")
-    print(f"📘 NCERT datasets loaded: {loaded}")
+                log.warning(f"⚠️ Failed to load NCERT '{name}': {e}")
+    log.info(f"📘 NCERT datasets loaded: {loaded}")
 
-# ----------------------
-# Query Model
-# ----------------------
+# ======================
+# Schemas
+# ======================
 class Query(BaseModel):
     question: str
 
-# ----------------------
+# ======================
+# Admin
+# ======================
+@app.post("/admin/refresh")
+def admin_refresh():
+    try:
+        refresh_vector_stores()
+        load_ncert_vectors()
+        return {
+            "ok": True,
+            "message": "Vectors refreshed",
+            "stores": list(vector_stores.keys()),
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
+# ======================
 # Ask endpoint
-# ----------------------
+# ======================
 @app.post("/ask")
 async def ask(query: Query):
     q_text = query.question.strip()
@@ -433,7 +502,7 @@ async def ask(query: Query):
     answer = None
     lower_q = q_text.lower()
     if any(phrase in lower_q for phrase in INTENT_MAP["self_identity"]):
-        answer = "I'm Brightly — your friendly Modern Senior Secondary School assistant..."
+        answer = "I'm Brightly — your friendly Modern Senior Secondary School assistant."
     elif any(word in lower_q for word in ["provide", "offer", "help", "assist", "what can you"]):
         answer = random.choice(
             [
@@ -453,7 +522,7 @@ async def ask(query: Query):
     sub_qs = split_subquestions(q_text)
 
     simple_math_questions = {
-        "quadratic equations": "A quadratic equation is of the form ax² + bx + c = 0, ... examples ..."
+        "quadratic equations": "A quadratic equation is of the form ax² + bx + c = 0. The solutions are x = [-b ± √(b² - 4ac)] / 2a.",
     }
 
     for sq in sub_qs:
@@ -479,16 +548,16 @@ async def ask(query: Query):
                     if sq in manual_cache:
                         context += str(manual_cache[sq].get("answer", "")) + "\n"
                 except Exception as e:
-                    print(f"⚠️ Manual cache load error: {e}")
+                    log.warning(f"⚠️ Manual cache load error: {e}")
 
-            # Vectors
+            # Vector stores
             for store_name, retriever in vector_stores.items():
                 try:
                     results = safe_retrieve(retriever, sq)
                     if results:
                         context += "\n".join([doc.page_content for doc in results]) + "\n"
                 except Exception as e:
-                    print(f"⚠️ Retriever '{store_name}' error: {e}")
+                    log.warning(f"⚠️ Retriever '{store_name}' error: {e}")
 
             # Conversation memory
             conv_context = retrieve_relevant_memory(sq)
@@ -499,31 +568,23 @@ async def ask(query: Query):
 
             prompt = f"""
 You are called and are Brightly — the official AI assistant of Modern Senior Secondary School, Chennai.
-You are also the greatest school AI tutor.
-You can explain and solve problems in math, physics, and chemistry like an experienced teacher.
-You can perform calculations, algebra, and trigonometry using your internal math tools.
+You are also a helpful school AI tutor.
+Explain and solve problems in math, physics, and chemistry like an experienced teacher.
 When students ask a study question:
-- Give short but clear explanations with steps.
-- Avoid unnecessary emojis or robotic tone.
+- Give short, clear explanations with steps.
 - Use plain, teacher-style English.
 
 Knowledge Scope:
 - NCERT-based Physics, Chemistry, Maths (Classes 6–12)
-- General school information, guidance, and basic academics
-- You can reason, calculate, and explain formulas clearly
+- General school information
 
 Tone:
 - Friendly, conversational, natural
-- Humble and context-aware
-- Avoid robotic style
+- Keep responses concise
 
 Rules:
-- avoid political talks and if something is unrelated to school studies and school avoid it
-- Never say you were created by OpenAI or Meta
+- Avoid politics; keep school-relevant
 - If asked who created you, answer: "I was created by the technical team at Modern Senior Secondary School to assist students and parents with school-related queries."
-- If irrelevant/out-of-scope, respond naturally.
-- Keep responses short and human-like.
-- You are an Indian English speaker. Maintain cultural relevance and rupees.
 
 Context:
 {context}
@@ -533,7 +594,7 @@ Answer:
             try:
                 answer = get_answer_llm().invoke(prompt).strip()
             except Exception as e:
-                print(f"⚠️ LLM error: {e}")
+                log.warning(f"⚠️ LLM error: {e}")
                 answer = "I’m having trouble accessing the data at the moment, please try again."
 
         add_to_memory(sq, answer)
@@ -542,9 +603,9 @@ Answer:
 
     return JSONResponse({"answer": "\n".join(final_answers), "history": conversation_history})
 
-# ----------------------
-# Session housekeeping (optional persistence)
-# ----------------------
+# ======================
+# Sessions (optional persistence)
+# ======================
 SESSION_DIR = "sessions"
 os.makedirs(SESSION_DIR, exist_ok=True)
 SESSION_FILE = None
@@ -559,7 +620,7 @@ def save_session_data(session_file):
         with open(session_file, "w", encoding="utf-8") as f:
             json.dump(data_to_save, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"⚠️ Failed to save session: {e}")
+        log.warning(f"⚠️ Failed to save session: {e}")
 
 def cleanup_old_sessions(max_files=10):
     try:
@@ -570,42 +631,43 @@ def cleanup_old_sessions(max_files=10):
         for f in files[:-max_files]:
             try:
                 os.remove(f)
-                print(f"🗑️ Deleted old session: {f}")
+                log.info(f"🗑️ Deleted old session: {f}")
             except Exception:
                 pass
     except Exception as e:
-        print(f"⚠️ Session cleanup error: {e}")
+        log.warning(f"⚠️ Session cleanup error: {e}")
 
-# ----------------------
+# ======================
 # Startup / Shutdown
-# ----------------------
+# ======================
 @app.on_event("startup")
 def startup_event():
-    print("🚀 Server starting up...")
-    print(f"   Project = {GOOGLE_CLOUD_PROJECT}")
-    print(f"   Location = {GOOGLE_CLOUD_LOCATION}")
-    print(f"   Refresh vectors on startup = {REFRESH_VECTORS_ON_STARTUP}")
+    log.info("🚀 Server starting up...")
+    log.info(f"   Project = {GOOGLE_CLOUD_PROJECT}")
+    log.info(f"   Location = {GOOGLE_CLOUD_LOCATION}")
+    log.info(f"   Refresh vectors on startup = {REFRESH_VECTORS_ON_STARTUP}")
+    if netlify_origin:
+        log.info(f"   NETLIFY_ORIGIN = {netlify_origin}")
     cleanup_old_sessions(max_files=10)
 
     if REFRESH_VECTORS_ON_STARTUP:
         refresh_vector_stores()
-        # Optional NCERT files if present
         load_ncert_vectors()
-        print("✅ Vector stores + NCERT data loaded.")
+        log.info("✅ Vector stores + NCERT data loaded.")
     else:
-        print("⏭️ Skipping vector refresh/load on startup.")
+        log.info("⏭️ Skipping vector refresh/load on startup.")
 
 @app.on_event("shutdown")
 def shutdown_event():
-    print("🚪 Server shutting down...")
+    log.info("🚪 Server shutting down...")
     global SESSION_FILE
     if SESSION_FILE is None:
         SESSION_FILE = start_new_session()
     save_session_data(SESSION_FILE)
     cleanup_old_sessions(max_files=10)
-    print(f"💾 Session data saved to {SESSION_FILE}")
+    log.info(f"💾 Session data saved to {SESSION_FILE}")
 
-# Local dev entrypoint (Cloud Run ignores this, uses your Docker CMD)
+# Local dev entrypoint (Cloud Run uses your Docker CMD)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("api:app", host="0.0.0.0", port=int(os.getenv("PORT", "8080")), reload=False)
