@@ -5,3 +5,4 @@ vectorstore/
 sessions/
 *.sqlite3
 .vscode/
+.env
